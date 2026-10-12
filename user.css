@@ -1,0 +1,133 @@
+/* ---------- Font ---------- */
+/* "JetBrainsMono Nerd Font" is the family name of your Nerd Font install;
+   "JetBrains Mono" is the plain one, kept as a fallback. */
+:root {
+  --theme-font: "JetBrainsMono Nerd Font", "JetBrains Mono", monospace;
+
+  /* Spotify's own font variables */
+  --font-family: var(--theme-font);
+  --encore-body-font-stack: var(--theme-font);
+  --encore-title-font-stack: var(--theme-font);
+  --encore-variable-font-stack: var(--theme-font);
+}
+
+* {
+  font-family: var(--theme-font) !important;
+}
+
+/* ---------- Small touches (delete or tweak freely) ---------- */
+
+/* Accent-colored progress / volume bars */
+.x-progressBar-fillColor {
+  background-color: var(--spice-button) !important;
+}
+
+/* Text selection in the accent color */
+::selection {
+  background: rgba(var(--spice-rgb-button), 0.35);
+}
+
+/* Slimmer scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--spice-misc);
+  border-radius: 4px;
+}
+
+/* ---------- Lyric line in the now-playing bar (theme.js) ---------- */
+/* All animations use steps(1) so they jump frame to frame (~12fps) instead of
+   tweening smoothly: that's the crunchy look. */
+.npb-lyric {
+  position: absolute;
+  z-index: 1;
+  transform: translateY(-50%);
+  height: 24px;
+  line-height: 24px;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--spice-text);
+  pointer-events: none;
+  /* fade top and bottom so it looks like a slot machine window */
+  -webkit-mask-image: linear-gradient(transparent, #000 20%, #000 80%, transparent);
+}
+
+.npb-lyric--overflow {
+  -webkit-mask-image:
+    linear-gradient(transparent, #000 20%, #000 80%, transparent),
+    linear-gradient(90deg, #000 92%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
+.npb-lyric--empty,
+.npb-lyric--hidden {
+  display: none;
+}
+
+.npb-lyric__track,
+.npb-lyric__reel {
+  display: inline-block;
+}
+
+/* long lines: theme.js sets --npb-scroll and runs this with steps() */
+@keyframes npb-scroll {
+  from { translate: 0; }
+  to   { translate: var(--npb-scroll); }
+}
+
+/* one reel per letter */
+.npb-ch {
+  display: inline-block;
+  white-space: pre;
+}
+
+.npb-ch--spin {
+  color: var(--spice-subtext);
+  animation: npb-reel 0.25s steps(1) infinite;
+}
+
+.npb-ch--land {
+  animation: npb-land 0.33s steps(1) both;
+}
+
+/* whole line shakes while the reels spin, then thunks when they stop */
+.npb-lyric--spinning .npb-lyric__reel {
+  animation: npb-shake 0.5s steps(1) infinite;
+}
+
+.npb-lyric--thunk .npb-lyric__reel {
+  animation: npb-thunk 0.25s steps(1);
+}
+
+@keyframes npb-reel {
+  0%   { transform: translateY(-45%); opacity: 0.4; }
+  33%  { transform: translateY(0);    opacity: 0.9; }
+  66%  { transform: translateY(45%);  opacity: 0.4; }
+}
+
+@keyframes npb-land {
+  0%   { transform: translateY(-60%); color: var(--spice-button); }
+  25%  { transform: translateY(20%);  color: var(--spice-button); }
+  50%  { transform: translateY(-8%);  color: var(--spice-button-active); }
+  75%  { transform: translateY(0); }
+  100% { transform: none;             color: var(--spice-text); }
+}
+
+@keyframes npb-shake {
+  0%   { transform: translate(1px, -1px); }
+  16%  { transform: translate(-2px, 1px); }
+  33%  { transform: translate(1px, 2px) rotate(-0.6deg); }
+  50%  { transform: translate(-1px, -2px); }
+  66%  { transform: translate(2px, 1px) rotate(0.6deg); }
+  83%  { transform: translate(-1px, 0); }
+}
+
+@keyframes npb-thunk {
+  0%   { transform: translateY(3px); }
+  33%  { transform: translateY(-1px); }
+  66%  { transform: none; }
+}
