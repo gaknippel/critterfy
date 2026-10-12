@@ -1,4 +1,4 @@
-﻿# critterfy
+# critterfy
 
 just a calm grey themed custom spicetify theme. i added a js file to fetch lyrics and play them in a cool animation next to the play bar :D
 
