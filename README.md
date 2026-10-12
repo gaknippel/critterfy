@@ -2,7 +2,9 @@
 
 just a calm grey themed custom spicetify theme. i added a js file to fetch lyrics and play them in a cool animation next to the play bar :D
 
-![preview](preview.png)
+![preview](preview1.png)
+
+<video src="https://raw.githubusercontent.com/gaknippel/critterfy/main/preview2.webm" autoplay loop muted playsinline></video>
 
 ## Install
 
