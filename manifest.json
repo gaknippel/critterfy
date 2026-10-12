@@ -1,0 +1,13 @@
+[
+  {
+    "name": "critterfy",
+    "description": "crittercast's custom theme",
+    "preview": "preview.png",
+    "readme": "README.md",
+    "usercss": "user.css",
+    "schemes": "color.ini",
+    "include": ["theme.js"],
+    "authors": [{ "name": "gaknippel", "url": "https://github.com/gaknippel" }],
+    "tags": ["dark", "lyrics"]
+  }
+]
