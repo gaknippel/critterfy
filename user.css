@@ -4,7 +4,6 @@
 :root {
   --theme-font: "JetBrainsMono Nerd Font", "JetBrains Mono", monospace;
 
-  /* Spotify's own font variables */
   --font-family: var(--theme-font);
   --encore-body-font-stack: var(--theme-font);
   --encore-title-font-stack: var(--theme-font);
@@ -15,19 +14,15 @@
   font-family: var(--theme-font) !important;
 }
 
-/* ---------- Small touches (delete or tweak freely) ---------- */
 
-/* Accent-colored progress / volume bars */
 .x-progressBar-fillColor {
   background-color: var(--spice-button) !important;
 }
 
-/* Text selection in the accent color */
 ::selection {
   background: rgba(var(--spice-rgb-button), 0.35);
 }
 
-/* Slimmer scrollbars */
 ::-webkit-scrollbar {
   width: 8px;
 }
@@ -36,9 +31,8 @@
   border-radius: 4px;
 }
 
-/* ---------- Lyric line in the now-playing bar (theme.js) ---------- */
-/* All animations use steps(1) so they jump frame to frame (~12fps) instead of
-   tweening smoothly: that's the crunchy look. */
+/* ---------- lyric line in the now-playing bar (theme.js) ---------- */
+
 .npb-lyric {
   position: absolute;
   z-index: 1;
@@ -51,7 +45,6 @@
   font-weight: 700;
   color: var(--spice-text);
   pointer-events: none;
-  /* fade top and bottom so it looks like a slot machine window */
   -webkit-mask-image: linear-gradient(transparent, #000 20%, #000 80%, transparent);
 }
 
@@ -73,13 +66,11 @@
   display: inline-block;
 }
 
-/* long lines: theme.js sets --npb-scroll and runs this with steps() */
 @keyframes npb-scroll {
   from { translate: 0; }
   to   { translate: var(--npb-scroll); }
 }
 
-/* one reel per letter */
 .npb-ch {
   display: inline-block;
   white-space: pre;
@@ -94,7 +85,6 @@
   animation: npb-land 0.33s steps(1) both;
 }
 
-/* whole line shakes while the reels spin, then thunks when they stop */
 .npb-lyric--spinning .npb-lyric__reel {
   animation: npb-shake 0.5s steps(1) infinite;
 }

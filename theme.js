@@ -1,8 +1,7 @@
-// Shows the current synced lyric line in the now-playing bar, to the right of the
-// play buttons, with a low-fps slot machine reel animation.
+// shows the current synced lyric line in the now-playing bar, to the right of the
 (async function npbLyrics() {
   const LYRICS_URL = "https://spclient.wg.spotify.com/color-lyrics/v2/track/";
-  const FPS = 12; // low on purpose, keeps it crunchy
+  const FPS = 12; 
   const SPIN_FRAMES = 3; // frames every reel spins before the first one stops
   const STOP_FRAMES = 9; // frames over which the reels stop, left to right
   const LEAD_MS = 300; // start spinning a bit early so the line lands on time
@@ -41,7 +40,7 @@
     node.classList.add(cls);
   };
 
-  // Spotify re-renders the bar sometimes, so keep re-attaching our element
+  // spotify re-renders the bar sometimes, so keep re-attaching our element
   function attach() {
     const bar = document.querySelector('[data-testid="now-playing-bar"]');
     if (!bar || el.parentElement === bar) return;
@@ -49,7 +48,7 @@
     bar.append(el);
   }
 
-  // Sit in the gap between the last playback button and the right-side controls
+  // sit in the gap between the last playback button and the right-side controls
   function place() {
     const bar = el.parentElement;
     const play = bar?.querySelector('[data-testid="control-button-playpause"]');
@@ -63,7 +62,6 @@
       if (r.width && Math.abs((r.top + r.bottom) / 2 - midY) < 8) left = Math.max(left, r.right);
     }
 
-    // right edge = first control (queue, volume, ...) to the right of the play buttons
     const barRect = bar.getBoundingClientRect();
     const controls = bar.querySelector('[data-testid="player-controls"]');
     let right = barRect.right;
@@ -79,13 +77,11 @@
     el.style.width = `${Math.max(0, space)}px`;
     el.classList.toggle("npb-lyric--hidden", space < MIN_SPACE);
 
-    // shrink to fit (monospace, so width scales linearly with font size)
     const current = parseFloat(el.style.fontSize) || BASE_FONT;
     const natural = (reel.offsetWidth * BASE_FONT) / current;
     const size = natural ? Math.max(MIN_FONT, Math.min(BASE_FONT, Math.floor((BASE_FONT * space * 2) / natural) / 2)) : BASE_FONT;
     el.style.fontSize = `${size}px`;
 
-    // still too long at the smallest size: scroll it (see show())
     const over = (natural * size) / BASE_FONT - space;
     el.classList.toggle("npb-lyric--overflow", over > 0);
     el.style.setProperty("--npb-scroll", `${-(over + space * 0.08)}px`);
@@ -120,7 +116,7 @@
     el.classList.toggle("npb-lyric--empty", !words);
     if (!words) return;
 
-    // one reel per character; spaces don't spin
+    // one reel per character; spaces dont spin
     const reels = [...words].map((c) => {
       const s = document.createElement("span");
       if (c === " ") {
@@ -141,8 +137,6 @@
     el.classList.add("npb-lyric--spinning");
     place();
 
-    // too long even at MIN_FONT: once the reels land, step-scroll to the end
-    // before the next line starts
     if (el.classList.contains("npb-lyric--overflow")) {
       const landMs = (stopAt[stopAt.length - 1] / FPS) * 1000 + 330;
       const lineMs = (lines[i + 1]?.start ?? line.start + 5000) - line.start;
@@ -186,7 +180,7 @@
   loadLyrics();
 })();
 
-// Sets the accent color to the average color of the current album cover.
+// sets the accent color to the average color of the current album cover.
 (async function coverAccent() {
   const SIZE = 32; // cover is scaled down to SIZE x SIZE before averaging
   // Clamp lightness so the accent stays readable on the grey background.
