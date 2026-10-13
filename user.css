@@ -78,25 +78,26 @@
 
 .npb-ch--spin {
   color: var(--spice-subtext);
-  animation: npb-reel 0.25s steps(1) infinite;
+  animation: npb-reel 0.2s linear infinite;
 }
 
 .npb-ch--land {
-  animation: npb-land 0.33s steps(1) both;
+  animation: npb-land 0.33s ease-out both;
 }
 
 .npb-lyric--spinning .npb-lyric__reel {
-  animation: npb-shake 0.5s steps(1) infinite;
+  animation: npb-shake 0.3s linear infinite;
 }
 
 .npb-lyric--thunk .npb-lyric__reel {
-  animation: npb-thunk 0.25s steps(1);
+  animation: npb-thunk 0.25s ease-out;
 }
 
+/* glyphs roll downward through the window, like a spinning reel */
 @keyframes npb-reel {
-  0%   { transform: translateY(-45%); opacity: 0.4; }
-  33%  { transform: translateY(0);    opacity: 0.9; }
-  66%  { transform: translateY(45%);  opacity: 0.4; }
+  0%   { transform: translateY(-60%); opacity: 0.3; }
+  50%  { transform: translateY(0);    opacity: 0.9; }
+  100% { transform: translateY(60%);  opacity: 0.3; }
 }
 
 @keyframes npb-land {
@@ -108,7 +109,7 @@
 }
 
 @keyframes npb-shake {
-  0%   { transform: translate(1px, -1px); }
+  0%, 100% { transform: translate(1px, -1px); }
   16%  { transform: translate(-2px, 1px); }
   33%  { transform: translate(1px, 2px) rotate(-0.6deg); }
   50%  { transform: translate(-1px, -2px); }
@@ -120,4 +121,194 @@
   0%   { transform: translateY(3px); }
   33%  { transform: translateY(-1px); }
   66%  { transform: none; }
+}
+
+/* ---------- hover animations ---------- */
+/* Uses the scale/translate/rotate properties so Spotify's own transforms keep working. */
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--spice-button);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* icon buttons (player controls, hearts, top bar, ...) */
+  button[aria-label]:not(:disabled):hover,
+  [data-encore-id="buttonPrimary"]:hover,
+  [data-encore-id="buttonSecondary"]:hover {
+    animation: hov-pop 0.25s ease-out forwards;
+  }
+
+  [data-testid="control-button-playpause"]:hover {
+    animation:
+      hov-pop 0.25s ease-out forwards,
+      hov-throb 0.8s 0.25s ease-in-out infinite;
+  }
+
+  /* cards: pop out with a hard accent shadow */
+  .main-card-card:hover,
+  [data-encore-id="card"]:hover {
+    animation: hov-lift 0.25s ease-out forwards;
+  }
+
+  .main-cardImage-imageWrapper {
+    overflow: hidden;
+  }
+
+  .main-card-card:hover .main-cardImage-image {
+    animation: hov-zoom 0.25s ease-out forwards;
+  }
+
+  /* track rows, library items, context menu items: nudge right with an accent bar */
+  [role="grid"] [role="row"]:not([aria-rowindex="1"]):hover,
+  [role="listitem"]:hover,
+  [role="menuitem"]:hover {
+    animation: hov-nudge 0.2s ease-out forwards;
+  }
+
+  /* filter chips: wobble */
+  [data-encore-id="chip"]:hover {
+    animation: hov-wobble 0.4s ease-out forwards;
+  }
+
+  /* now-playing cover art: tilt loop */
+  [data-testid="now-playing-widget"] img:hover {
+    animation: hov-tilt 1s ease-in-out infinite;
+  }
+}
+
+@keyframes hov-pop {
+  0%   { scale: 1; }
+  33%  { scale: 1.25; }
+  66%  { scale: 1.05; }
+  100% { scale: 1.15; }
+}
+
+@keyframes hov-throb {
+  0%, 100% { scale: 1.15; box-shadow: 0 0 0 3px rgba(var(--spice-rgb-button), 0.45); }
+  50%      { scale: 1.1;  box-shadow: 0 0 0 6px rgba(var(--spice-rgb-button), 0.15); }
+}
+
+@keyframes hov-lift {
+  0%   { translate: 0 0;      box-shadow: none; }
+  33%  { translate: -6px -6px; box-shadow: 6px 6px 0 var(--spice-button); }
+  66%  { translate: -2px -2px; box-shadow: 2px 2px 0 var(--spice-button); }
+  100% { translate: -4px -4px; box-shadow: 4px 4px 0 var(--spice-button); }
+}
+
+@keyframes hov-zoom {
+  0%   { scale: 1; }
+  50%  { scale: 1.1; }
+  100% { scale: 1.06; }
+}
+
+@keyframes hov-nudge {
+  0%   { translate: 0 0; box-shadow: none; }
+  50%  { translate: 6px 0; box-shadow: inset 3px 0 0 var(--spice-button); }
+  100% { translate: 4px 0; box-shadow: inset 3px 0 0 var(--spice-button); }
+}
+
+@keyframes hov-wobble {
+  0%   { rotate: 0deg;  scale: 1; }
+  25%  { rotate: -4deg; scale: 1.08; }
+  50%  { rotate: 3deg;  scale: 1.08; }
+  75%  { rotate: -1deg; scale: 1.05; }
+  100% { rotate: 0deg;  scale: 1.05; }
+}
+
+@keyframes hov-tilt {
+  0%, 100% { rotate: -3deg; scale: 1.08; }
+  50%      { rotate: 3deg;  scale: 1.08; }
+}
+
+/* ---------- BPM pill + lyrics icon in song lists, beat flash (theme.js) ---------- */
+
+[role="gridcell"]:has(> .tl-bpm) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+[role="gridcell"]:has(> .tl-bpm) > :not(.tl-bpm) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-bpm {
+  flex-shrink: 0;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  white-space: nowrap;
+  background: var(--spice-button);
+  color: #111;
+}
+
+.tl-bpm small {
+  margin-left: 2px;
+  font-size: 7px;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.tl-bpm:empty {
+  display: none;
+}
+
+[role="row"]:hover .tl-bpm {
+  filter: brightness(1.15);
+}
+
+/* lyrics icon, sits with Spotify's explicit/offline badges */
+.tl-lyr-slot {
+  grid-area: badges;
+  display: flex;
+  align-items: center;
+}
+
+.tl-lyr {
+  display: flex;
+  margin-right: 4px;
+  color: var(--spice-subtext);
+}
+
+.tl-lyr[data-state="LINE_SYNCED"] {
+  color: var(--spice-button);
+}
+
+.tl-lyr svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+
+.tl-lyr:empty {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* smooth on purpose, unlike the rest of the theme */
+  .beat-flash {
+    animation: beat-flash 0.25s ease-out;
+  }
+
+  .beat-flash--bar {
+    animation: beat-flash-bar 0.33s ease-out;
+  }
+}
+
+@keyframes beat-flash {
+  0%   { filter: brightness(1.7) drop-shadow(0 0 4px rgba(var(--spice-rgb-button), 0.9)); }
+  50%  { filter: brightness(1.3) drop-shadow(0 0 2px rgba(var(--spice-rgb-button), 0.5)); }
+  100% { filter: none; }
+}
+
+@keyframes beat-flash-bar {
+  0%   { filter: brightness(2.2) drop-shadow(0 0 6px rgba(var(--spice-rgb-button), 1)); scale: 1 2; }
+  33%  { filter: brightness(1.6) drop-shadow(0 0 4px rgba(var(--spice-rgb-button), 0.7)); scale: 1 1.5; }
+  66%  { filter: brightness(1.2) drop-shadow(0 0 2px rgba(var(--spice-rgb-button), 0.4)); scale: 1 1.2; }
+  100% { filter: none; scale: 1; }
 }

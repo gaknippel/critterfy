@@ -1,9 +1,10 @@
 // shows the current synced lyric line in the now-playing bar, to the right of the
 (async function npbLyrics() {
   const LYRICS_URL = "https://spclient.wg.spotify.com/color-lyrics/v2/track/";
-  const FPS = 12; 
-  const SPIN_FRAMES = 3; // frames every reel spins before the first one stops
-  const STOP_FRAMES = 9; // frames over which the reels stop, left to right
+  const SPIN_MS = 250; // every reel spins this long before the first one stops
+  const STOP_MS_PER_REEL = 83; // then the reels stop left to right, this far apart...
+  const STOP_MS_MAX = 750; // ...squeezed into this window for long lines
+  const LAND_MS = 330; // length of the npb-land animation in user.css
   const LEAD_MS = 300; // start spinning a bit early so the line lands on time
   const GLYPHS = "█▓▒░#$%&@*+=?!<>/7$0123456789ABCDEFGHJKLMNPQRSTUVWXYZ";
   const BASE_FONT = 13; // px, lines shrink from here to fit...
@@ -30,7 +31,7 @@
   let lines = []; // [{ start, text }]
   let uri = null;
   let index = -2;
-  let spinTimer = null;
+  let spinFrame = null;
 
   const currentUri = () => (Spicetify.Player.data?.item ?? Spicetify.Player.data?.track)?.uri;
   const randomGlyph = () => GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
@@ -106,7 +107,7 @@
 
   function show(i) {
     index = i;
-    clearInterval(spinTimer);
+    cancelAnimationFrame(spinFrame);
     reel.textContent = "";
     track.style.animation = "none";
     el.classList.remove("npb-lyric--spinning", "npb-lyric--thunk");
@@ -132,24 +133,25 @@
       return { s, c };
     }).filter(Boolean);
 
-    const stopAt = reels.map((_, k) => SPIN_FRAMES + Math.floor((k * Math.min(reels.length, STOP_FRAMES)) / reels.length));
-    let frame = 0;
+    const stopWindow = Math.min(reels.length * STOP_MS_PER_REEL, STOP_MS_MAX);
+    const stopAt = reels.map((_, k) => SPIN_MS + (k * stopWindow) / reels.length);
     el.classList.add("npb-lyric--spinning");
     place();
 
     if (el.classList.contains("npb-lyric--overflow")) {
-      const landMs = (stopAt[stopAt.length - 1] / FPS) * 1000 + 330;
+      const landMs = stopAt[stopAt.length - 1] + LAND_MS;
       const lineMs = (lines[i + 1]?.start ?? line.start + 5000) - line.start;
       const scrollMs = Math.max(800, (lineMs - landMs) * 0.8);
-      const steps = Math.max(1, Math.round((scrollMs / 1000) * FPS));
-      track.style.animation = `npb-scroll ${scrollMs}ms steps(${steps}) ${landMs}ms both`;
+      track.style.animation = `npb-scroll ${scrollMs}ms linear ${landMs}ms both`;
     }
 
-    spinTimer = setInterval(() => {
-      frame++;
+    // new random glyph on every display frame until each reel's stop time
+    const start = performance.now();
+    const spin = (now) => {
+      const elapsed = now - start;
       reels.forEach((r, k) => {
         if (!r.s.classList.contains("npb-ch--spin")) return;
-        if (frame >= stopAt[k]) {
+        if (elapsed >= stopAt[k]) {
           r.s.textContent = r.c;
           r.s.style.animationDelay = "";
           r.s.className = "npb-ch npb-ch--land";
@@ -157,12 +159,14 @@
           r.s.textContent = randomGlyph();
         }
       });
-      if (frame >= stopAt[stopAt.length - 1]) {
-        clearInterval(spinTimer);
+      if (elapsed >= stopAt[stopAt.length - 1]) {
         el.classList.remove("npb-lyric--spinning");
         restartClass(el, "npb-lyric--thunk");
+      } else {
+        spinFrame = requestAnimationFrame(spin);
       }
-    }, 1000 / FPS);
+    };
+    spinFrame = requestAnimationFrame(spin);
   }
 
   function tick() {
@@ -267,4 +271,295 @@
 
   Spicetify.Player.addEventListener("songchange", update);
   update();
+})();
+
+// Flashes the progress bar on every beat of the current song.
+(async function beatSync() {
+  const BEAT_WINDOW_MS = 150; // skip beats we're already this late for (after a seek or lag)
+
+  while (!window.Spicetify?.getAudioData || !Spicetify.Player?.addEventListener) {
+    await new Promise((r) => setTimeout(r, 300));
+  }
+
+  let beats = []; // ms
+  let bars = new Set(); // ms, beats that start a bar
+  let next = 0;
+  let lastT = 0;
+  let uri = null;
+
+  // Per-device delay, tuned by ear with Ctrl+Alt+Left/Right (Ctrl+Alt+0 resets).
+  // When playing on another device (phone, speaker) the desktop only estimates the
+  // position, and Bluetooth adds its own lag on top.
+  const OFFSET_KEY = "mono:beat-offsets";
+  const OFFSET_STEP = 20;
+  let offsets = {};
+  try {
+    offsets = JSON.parse(localStorage.getItem(OFFSET_KEY)) ?? {};
+  } catch {}
+
+  const deviceName = () => {
+    const d = Spicetify.Platform?.ConnectAPI?.state?.activeDevice;
+    return !d || d.isLocal ? "this computer" : d.name;
+  };
+  const delay = () => offsets[deviceName()] ?? 0;
+  const position = () => Spicetify.Player.getProgress() - delay();
+
+  document.addEventListener("keydown", (e) => {
+    if (!e.ctrlKey || !e.altKey || !["ArrowLeft", "ArrowRight", "0"].includes(e.key)) return;
+    e.preventDefault();
+    const name = deviceName();
+    offsets[name] = e.key === "0" ? 0 : delay() + (e.key === "ArrowRight" ? OFFSET_STEP : -OFFSET_STEP);
+    try {
+      localStorage.setItem(OFFSET_KEY, JSON.stringify(offsets));
+    } catch {}
+    const ms = offsets[name];
+    Spicetify.showNotification(`beat delay on ${name}: ${ms > 0 ? "+" : ""}${ms}ms`);
+  });
+
+  async function load() {
+    const u = (Spicetify.Player.data?.item ?? Spicetify.Player.data?.track)?.uri;
+    uri = u;
+    beats = [];
+    bars = new Set();
+    if (!u?.startsWith("spotify:track:")) return;
+    try {
+      const data = await Spicetify.getAudioData(u);
+      if (uri !== u) return;
+      beats = (data.beats ?? []).map((b) => Math.round(b.start * 1000));
+      const barStarts = (data.bars ?? []).map((b) => Math.round(b.start * 1000));
+      // snap bar starts to the nearest beat so the lookup is exact
+      bars = new Set(barStarts.map((s) => beats.reduce((a, b) => (Math.abs(b - s) < Math.abs(a - s) ? b : a), beats[0])));
+      seek(position());
+    } catch (e) {
+      console.warn("[beatSync] no audio analysis", e);
+    }
+  }
+
+  // index of the first beat after t
+  function seek(t) {
+    let lo = 0, hi = beats.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (beats[mid] <= t) lo = mid + 1;
+      else hi = mid;
+    }
+    next = lo;
+    lastT = t;
+  }
+
+  function beat(isBar) {
+    const bar = document.querySelector('[data-testid="progress-bar"]');
+    if (!bar) return;
+    bar.classList.remove("beat-flash", "beat-flash--bar");
+    void bar.offsetWidth;
+    bar.classList.add(isBar ? "beat-flash--bar" : "beat-flash");
+  }
+
+  function frame() {
+    requestAnimationFrame(frame);
+    if (!beats.length) return;
+    const t = position();
+    if (t < lastT - 200 || t > lastT + 1000) seek(t); // seeked
+    lastT = t;
+    while (next < beats.length && beats[next] <= t) {
+      if (t - beats[next] < BEAT_WINDOW_MS) beat(bars.has(beats[next]));
+      next++;
+    }
+  }
+
+  Spicetify.Player.addEventListener("songchange", load);
+  load();
+  requestAnimationFrame(frame);
+})();
+
+// BPM pill in song lists (albums, playlists, artist pages, ...).
+(async function tracklistBpm() {
+  const FEATURES_URL = "https://spclient.wg.spotify.com/audio-attributes/v1/audio-features?format=json&ids=";
+  const BATCH = 100;
+
+  while (!window.Spicetify?.CosmosAsync) await new Promise((r) => setTimeout(r, 300));
+
+  const tempos = new Map(); // track id -> bpm, or null if unknown
+  const queued = new Set();
+  let fetching = false;
+
+  // rows don't carry the track in the DOM, but their React props do
+  function rowTrackId(row) {
+    const key = Object.keys(row).find((k) => k.startsWith("__reactFiber"));
+    let f = row[key];
+    for (let depth = 0; f && depth < 6; depth++, f = f.return) {
+      const uri = f.memoizedProps?.uri;
+      if (typeof uri === "string") return uri.startsWith("spotify:track:") ? uri.split(":")[2] : null;
+    }
+    return null;
+  }
+
+  async function fetchQueued() {
+    if (fetching || !queued.size) return;
+    fetching = true;
+    const ids = [...queued].slice(0, BATCH);
+    ids.forEach((id) => queued.delete(id));
+    try {
+      const res = await Spicetify.CosmosAsync.get(FEATURES_URL + ids.join(","));
+      ids.forEach((id) => tempos.set(id, null));
+      for (const f of res?.audio_features ?? []) {
+        if (f?.id && f.tempo) tempos.set(f.id, Math.round(f.tempo));
+      }
+    } catch (e) {
+      ids.forEach((id) => tempos.set(id, null));
+      console.warn("[tracklistBpm] fetch failed", e);
+    }
+    fetching = false;
+    render();
+  }
+
+  function render() {
+    for (const row of document.querySelectorAll('[role="grid"] [role="row"][aria-rowindex]')) {
+      const id = rowTrackId(row);
+      if (!id) continue;
+      // the column before the duration: "Date added" on playlists, plays on albums/artists
+      const cells = row.querySelectorAll('[role="gridcell"]');
+      if (cells.length < 4) continue;
+      const cell = cells[cells.length - 2];
+
+      if (!tempos.has(id)) queued.add(id);
+      // rows get recycled for other tracks while scrolling, so always re-check
+      let tag = cell.querySelector(".tl-bpm");
+      if (!tag) {
+        tag = document.createElement("div");
+        tag.className = "tl-bpm";
+        cell.prepend(tag);
+      }
+      if (tag.dataset.id !== id || tag.dataset.bpm !== String(tempos.get(id))) {
+        tag.dataset.id = id;
+        tag.dataset.bpm = String(tempos.get(id));
+        tag.innerHTML = tempos.get(id) ? `${tempos.get(id)}<small>bpm</small>` : "";
+      }
+    }
+    fetchQueued();
+  }
+
+  setInterval(render, 500);
+})();
+
+// Lyrics icon next to the explicit badge in song lists: accent = timed, grey = plain text.
+(async function tracklistLyrics() {
+  const LYRICS_URL = "https://spclient.wg.spotify.com/color-lyrics/v2/track/";
+  const PARALLEL = 4;
+  const RETRY_MS = 60000; // after a failed request (rate limit, offline)
+  const CACHE_KEY = "mono:lyrics-sync";
+  const CACHE_MAX = 5000;
+  const TITLES = { LINE_SYNCED: "Timed lyrics", UNSYNCED: "Lyrics (not timed)" };
+
+  while (!window.Spicetify?.CosmosAsync) await new Promise((r) => setTimeout(r, 300));
+
+  // Spotify's own lyrics (microphone) icon
+  const ICON = `<svg viewBox="0 0 16 16" aria-hidden="true">${
+    Spicetify.SVGIcons?.lyrics ??
+    '<path d="M8.5 1A4.505 4.505 0 004 5.5c0 .731.191 1.411.502 2.022L1.99 13.163a1.307 1.307 0 00.541 1.666l.605.349a1.307 1.307 0 001.649-.283L9.009 9.95C11.248 9.692 13 7.807 13 5.5 13 3.019 10.981 1 8.5 1zM4.023 14.245a.307.307 0 01-.388.066l-.605-.349a.309.309 0 01-.128-.393l2.26-5.078A4.476 4.476 0 007.715 9.92l-3.692 4.325zM8.5 9C6.57 9 5 7.43 5 5.5S6.57 2 8.5 2 12 3.57 12 5.5 10.429 9 8.5 9z"/>'
+  }</svg>`;
+
+  // track id -> "LINE_SYNCED" | "UNSYNCED" | "NONE", kept across reloads
+  let cache = {};
+  try {
+    cache = JSON.parse(localStorage.getItem(CACHE_KEY)) ?? {};
+  } catch {}
+  const failedAt = new Map();
+  const queued = new Set();
+  let inFlight = 0;
+  let saveTimer = null;
+
+  function save() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      if (Object.keys(cache).length > CACHE_MAX) cache = {};
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+      } catch {}
+    }, 1000);
+  }
+
+  function rowTrackId(row) {
+    const key = Object.keys(row).find((k) => k.startsWith("__reactFiber"));
+    let f = row[key];
+    for (let depth = 0; f && depth < 6; depth++, f = f.return) {
+      const uri = f.memoizedProps?.uri;
+      if (typeof uri === "string") return uri.startsWith("spotify:track:") ? uri.split(":")[2] : null;
+    }
+    return null;
+  }
+
+  async function fetchOne(id) {
+    inFlight++;
+    try {
+      const body = await Spicetify.CosmosAsync.get(
+        `${LYRICS_URL}${id}?format=json&vocalRemoval=false&market=from_token`
+      );
+      cache[id] = body?.lyrics?.syncType ?? "NONE";
+      save();
+    } catch {
+      failedAt.set(id, Date.now());
+    }
+    inFlight--;
+    pump();
+  }
+
+  function pump() {
+    for (const id of queued) {
+      if (inFlight >= PARALLEL) return;
+      queued.delete(id);
+      fetchOne(id);
+    }
+  }
+
+  // Spotify's own badge slot (offline/explicit icons), or ours if the row has none
+  function badgeSlot(titleWrap) {
+    const native = [...titleWrap.children].find(
+      (c) => !c.classList.contains("tl-lyr-slot") && getComputedStyle(c).gridColumnStart === "badges"
+    );
+    const own = titleWrap.querySelector(":scope > .tl-lyr-slot");
+    if (native) {
+      own?.remove();
+      return native;
+    }
+    if (own) return own;
+    const slot = document.createElement("span");
+    slot.className = "tl-lyr-slot";
+    titleWrap.append(slot);
+    return slot;
+  }
+
+  function render() {
+    for (const row of document.querySelectorAll('[role="grid"] [role="row"][aria-rowindex]')) {
+      const id = rowTrackId(row);
+      if (!id) continue;
+      const titleCell = row.querySelector('[role="gridcell"][aria-colindex="2"]');
+      const titleWrap = titleCell && [...titleCell.querySelectorAll(":scope > *, :scope > * > *")].find(
+        (el) => getComputedStyle(el).gridTemplateAreas.includes("badges")
+      );
+      if (!titleWrap) continue;
+
+      const failed = failedAt.get(id);
+      if (!cache[id] && !queued.has(id) && (!failed || Date.now() - failed > RETRY_MS)) queued.add(id);
+
+      const slot = badgeSlot(titleWrap);
+      let tag = slot.querySelector(".tl-lyr");
+      if (!tag) {
+        tag = document.createElement("span");
+        tag.className = "tl-lyr";
+        slot.prepend(tag);
+      }
+      const state = cache[id] ?? "";
+      // rows get recycled for other tracks while scrolling, so always re-check
+      if (tag.dataset.id !== id || tag.dataset.state !== state) {
+        tag.dataset.id = id;
+        tag.dataset.state = state;
+        tag.title = TITLES[state] ?? "";
+        tag.innerHTML = TITLES[state] ? ICON : "";
+      }
+    }
+    pump();
+  }
+
+  setInterval(render, 500);
 })();
