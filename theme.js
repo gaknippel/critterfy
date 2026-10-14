@@ -302,18 +302,91 @@
     return !d || d.isLocal ? "this computer" : d.name;
   };
   const delay = () => offsets[deviceName()] ?? 0;
-  const position = () => Spicetify.Player.getProgress() - delay();
+
+  // Per-song correction from tapping along (hold Ctrl+Alt, tap B on the beat).
+  // The player only knows when a song "started", not when its audio actually came out
+  // of the headphones, so each song can be off by a different amount.
+  const SONG_OFFSET_KEY = "mono:beat-song-offsets";
+  const SONG_OFFSET_MAX = 2000; // songs remembered
+  const TAP_GAP_MS = 2500; // a pause longer than this starts a new tap session
+  const MIN_TAPS = 4;
+  let songOffsets = {};
+  try {
+    songOffsets = JSON.parse(localStorage.getItem(SONG_OFFSET_KEY)) ?? {};
+  } catch {}
+  let taps = []; // raw positions (device delay applied, song offset not)
+  let lastTapAt = 0;
+
+  const songOffset = () => songOffsets[uri] ?? 0;
+  const rawPosition = () => Spicetify.Player.getProgress() - delay();
+  const position = () => rawPosition() - songOffset();
+
+  const fmt = (ms) => `${ms > 0 ? "+" : ""}${Math.round(ms)}ms`;
+  const median = (xs) => {
+    const s = [...xs].sort((a, b) => a - b);
+    return s[s.length >> 1];
+  };
+
+  function nearestBeat(t) {
+    let lo = 0, hi = beats.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (beats[mid] <= t) lo = mid + 1;
+      else hi = mid;
+    }
+    const a = beats[lo - 1], b = beats[lo];
+    if (a === undefined) return b;
+    if (b === undefined) return a;
+    return t - a < b - t ? a : b;
+  }
+
+  function tap() {
+    if (!beats.length || !uri) return;
+    const now = performance.now();
+    if (now - lastTapAt > TAP_GAP_MS) taps = [];
+    lastTapAt = now;
+    taps.push(rawPosition());
+    if (taps.length < MIN_TAPS) {
+      Spicetify.showNotification(`tap ${taps.length}/${MIN_TAPS}…`);
+      return;
+    }
+    // how far ahead of the beat the player thinks it is when you hear the beat
+    const errors = taps.slice(-8).map((t) => t - nearestBeat(t));
+    const offset = median(errors);
+    const spread = median(errors.map((e) => Math.abs(e - offset)));
+    songOffsets[uri] = Math.round(offset);
+    const keys = Object.keys(songOffsets);
+    if (keys.length > SONG_OFFSET_MAX) delete songOffsets[keys[0]];
+    try {
+      localStorage.setItem(SONG_OFFSET_KEY, JSON.stringify(songOffsets));
+    } catch {}
+    seek(position());
+    Spicetify.showNotification(`synced to your taps: ${fmt(offset)} (±${Math.round(spread)}ms)`);
+  }
 
   document.addEventListener("keydown", (e) => {
-    if (!e.ctrlKey || !e.altKey || !["ArrowLeft", "ArrowRight", "0"].includes(e.key)) return;
+    if (!e.ctrlKey || !e.altKey) return;
+    if (e.code === "KeyB") {
+      e.preventDefault();
+      if (!e.repeat) tap();
+      return;
+    }
+    if (!["ArrowLeft", "ArrowRight", "0"].includes(e.key)) return;
     e.preventDefault();
     const name = deviceName();
-    offsets[name] = e.key === "0" ? 0 : delay() + (e.key === "ArrowRight" ? OFFSET_STEP : -OFFSET_STEP);
+    if (e.key === "0") {
+      offsets[name] = 0;
+      delete songOffsets[uri];
+      try {
+        localStorage.setItem(SONG_OFFSET_KEY, JSON.stringify(songOffsets));
+      } catch {}
+    } else {
+      offsets[name] = delay() + (e.key === "ArrowRight" ? OFFSET_STEP : -OFFSET_STEP);
+    }
     try {
       localStorage.setItem(OFFSET_KEY, JSON.stringify(offsets));
     } catch {}
-    const ms = offsets[name];
-    Spicetify.showNotification(`beat delay on ${name}: ${ms > 0 ? "+" : ""}${ms}ms`);
+    Spicetify.showNotification(`beat delay on ${name}: ${fmt(offsets[name])}${e.key === "0" ? " (song tap sync cleared)" : ""}`);
   });
 
   async function load() {
@@ -321,6 +394,7 @@
     uri = u;
     beats = [];
     bars = new Set();
+    taps = [];
     if (!u?.startsWith("spotify:track:")) return;
     try {
       const data = await Spicetify.getAudioData(u);

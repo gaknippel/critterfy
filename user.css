@@ -124,7 +124,9 @@
 }
 
 /* ---------- hover animations ---------- */
-/* Uses the scale/translate/rotate properties so Spotify's own transforms keep working. */
+/* ~24fps: steps() applies per keyframe segment, so each animation gets
+   steps(segment length in seconds * 24).
+   Uses the scale/translate/rotate properties so Spotify's own transforms keep working. */
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--spice-button);
@@ -132,22 +134,22 @@
 
 @media (prefers-reduced-motion: no-preference) {
   /* icon buttons (player controls, hearts, top bar, ...) */
-  button[aria-label]:not(:disabled):hover,
+  button[aria-label]:not(:disabled, [data-testid="cover-art-button"]):hover,
   [data-encore-id="buttonPrimary"]:hover,
   [data-encore-id="buttonSecondary"]:hover {
-    animation: hov-pop 0.25s ease-out forwards;
+    animation: hov-pop 0.25s steps(2) forwards;
   }
 
   [data-testid="control-button-playpause"]:hover {
     animation:
-      hov-pop 0.25s ease-out forwards,
-      hov-throb 0.8s 0.25s ease-in-out infinite;
+      hov-pop 0.25s steps(2) forwards,
+      hov-throb 0.8s 0.25s steps(10) infinite;
   }
 
   /* cards: pop out with a hard accent shadow */
   .main-card-card:hover,
   [data-encore-id="card"]:hover {
-    animation: hov-lift 0.25s ease-out forwards;
+    animation: hov-lift 0.25s steps(2) forwards;
   }
 
   .main-cardImage-imageWrapper {
@@ -155,24 +157,24 @@
   }
 
   .main-card-card:hover .main-cardImage-image {
-    animation: hov-zoom 0.25s ease-out forwards;
+    animation: hov-zoom 0.25s steps(3) forwards;
   }
 
   /* track rows, library items, context menu items: nudge right with an accent bar */
   [role="grid"] [role="row"]:not([aria-rowindex="1"]):hover,
   [role="listitem"]:hover,
   [role="menuitem"]:hover {
-    animation: hov-nudge 0.2s ease-out forwards;
+    animation: hov-nudge 0.2s steps(2) forwards;
   }
 
   /* filter chips: wobble */
   [data-encore-id="chip"]:hover {
-    animation: hov-wobble 0.4s ease-out forwards;
+    animation: hov-wobble 0.4s steps(2) forwards;
   }
 
-  /* now-playing cover art: tilt loop */
-  [data-testid="now-playing-widget"] img:hover {
-    animation: hov-tilt 1s ease-in-out infinite;
+  /* now-playing cover art: turns into a spinning record (33 1/3 rpm = 1.8s a turn) */
+  [data-testid="now-playing-widget"] [data-testid="cover-art-button"]:hover div:has(> img) {
+    animation: vinyl-spin 1.8s steps(43) infinite;
   }
 }
 
@@ -215,9 +217,52 @@
   100% { rotate: 0deg;  scale: 1.05; }
 }
 
-@keyframes hov-tilt {
-  0%, 100% { rotate: -3deg; scale: 1.08; }
-  50%      { rotate: 3deg;  scale: 1.08; }
+@keyframes vinyl-spin {
+  to { rotate: 360deg; }
+}
+
+/* ---------- now-playing cover as a vinyl record (on hover) ---------- */
+
+[data-testid="now-playing-widget"] [data-testid="CoverSlotCollapsed__container"],
+[data-testid="now-playing-widget"] [data-testid="cover-art-button"] {
+  transition: border-radius 0.25s steps(6);
+}
+
+[data-testid="now-playing-widget"] [data-testid="CoverSlotCollapsed__container"]:has(:hover),
+[data-testid="now-playing-widget"] [data-testid="cover-art-button"]:hover {
+  border-radius: 50%;
+}
+
+/* grooves (before) over a black disc with the cover left showing as the label (after) */
+[data-testid="now-playing-widget"] [data-testid="cover-art-button"] div:has(> img)::before,
+[data-testid="now-playing-widget"] [data-testid="cover-art-button"] div:has(> img)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s steps(6);
+}
+
+[data-testid="now-playing-widget"] [data-testid="cover-art-button"] div:has(> img)::after {
+  z-index: 1;
+  background:
+    radial-gradient(circle closest-side, #0b0b0b 0 6%, transparent 7%),
+    radial-gradient(circle closest-side, transparent 0 38%, #111 39% 98%, transparent 100%);
+}
+
+[data-testid="now-playing-widget"] [data-testid="cover-art-button"] div:has(> img)::before {
+  z-index: 2;
+  background:
+    linear-gradient(135deg, transparent 35%, rgba(255, 255, 255, 0.12) 50%, transparent 65%),
+    repeating-radial-gradient(circle closest-side, rgba(255, 255, 255, 0.07) 0 1px, transparent 1px 3px);
+  -webkit-mask-image: radial-gradient(circle closest-side, transparent 0 40%, #000 41% 98%, transparent 100%);
+}
+
+[data-testid="now-playing-widget"] [data-testid="cover-art-button"]:hover div:has(> img)::before,
+[data-testid="now-playing-widget"] [data-testid="cover-art-button"]:hover div:has(> img)::after {
+  opacity: 1;
 }
 
 /* ---------- BPM pill + lyrics icon in song lists, beat flash (theme.js) ---------- */
